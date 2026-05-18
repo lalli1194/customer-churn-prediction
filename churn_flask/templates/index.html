@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChurnSight — Customer Churn Predictor</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ═══════════════════════════ NAVBAR ════════════════════════════════════ -->
+<nav class="navbar navbar-expand-lg">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <span class="brand-icon">📡</span>
+      Churn<span class="brand-accent">Sight</span>
+    </a>
+    <div class="navbar-nav ms-auto d-flex flex-row gap-3">
+      <a class="nav-link" href="/health" target="_blank">
+        <i class="bi bi-activity"></i> API Health
+      </a>
+      <a class="nav-link" href="/api/sample" target="_blank">
+        <i class="bi bi-braces"></i> Sample JSON
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ HERO ══════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">
+      <span class="pulse-dot"></span> ML Model Active
+    </div>
+    <h1 class="hero-title">Customer Churn<br><span class="hero-highlight">Prediction Engine</span></h1>
+    <p class="hero-sub">
+      Enter customer details below. Our trained XGBoost model will predict
+      churn probability in real-time and explain the risk level.
+    </p>
+
+    {% if not model_ready %}
+    <div class="alert alert-warning model-warning" role="alert">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      <strong>Model not loaded.</strong>
+      Place <code>churn_model.pkl</code> and <code>scaler.pkl</code>
+      inside the <code>models/</code> folder, then restart the server.
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<div class="container main-container">
+
+  <!-- ═══════════════════ ERROR BANNER ════════════════════════════════ -->
+  {% if error %}
+  <div class="alert alert-danger alert-dismissible fade show result-alert" role="alert">
+    <i class="bi bi-x-circle-fill me-2"></i>
+    <strong>Error:</strong> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════ RESULT CARD ═════════════════════════════════ -->
+  {% if result %}
+  <div class="result-card result-{{ result.risk_color }} mb-5 animate-in">
+    <div class="result-header">
+      <div class="result-icon">
+        {% if result.will_churn %}🚨{% else %}✅{% endif %}
+      </div>
+      <div class="result-headline">
+        <div class="result-verdict">{{ result.prediction }}</div>
+        <div class="result-sub">Prediction complete</div>
+      </div>
+      <div class="result-badge badge-{{ result.risk_color }}">
+        {{ result.risk_level }} Risk
+      </div>
+    </div>
+
+    <div class="result-body">
+      <p class="result-message">{{ result.message }}</p>
+
+      <div class="prob-row">
+        <!-- Churn probability bar -->
+        <div class="prob-item">
+          <div class="prob-label">
+            <span>Churn Probability</span>
+            <strong>{{ result.churn_probability }}%</strong>
+          </div>
+          <div class="prob-bar">
+            <div class="prob-fill fill-danger" style="width: {{ result.churn_probability }}%"></div>
+          </div>
+        </div>
+        <!-- Stay probability bar -->
+        <div class="prob-item">
+          <div class="prob-label">
+            <span>Retention Probability</span>
+            <strong>{{ result.stay_probability }}%</strong>
+          </div>
+          <div class="prob-bar">
+            <div class="prob-fill fill-success" style="width: {{ result.stay_probability }}%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════ PREDICTION FORM ══════════════════════════════ -->
+  <form action="/predict" method="POST" id="churnForm" novalidate>
+
+    <!-- ── Section 1 : Personal Details ─────────────────────────────── -->
+    <div class="form-card">
+      <div class="form-card-header">
+        <span class="section-icon">👤</span>
+        <div>
+          <h2 class="section-title">Personal Details</h2>
+          <p class="section-sub">Basic demographic information</p>
+        </div>
+      </div>
+
+      <div class="row g-4">
+
+        <div class="col-md-4">
+          <label class="form-label">Gender</label>
+          <select name="gender" class="form-select" required>
+            <option value="">Select gender</option>
+            <option value="Male"   {% if form_data and form_data.gender=='Male'   %}selected{% endif %}>Male</option>
+            <option value="Female" {% if form_data and form_data.gender=='Female' %}selected{% endif %}>Female</option>
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Senior Citizen</label>
+          <select name="SeniorCitizen" class="form-select" required>
+            <option value="">Select</option>
+            <option value="0" {% if form_data and form_data.SeniorCitizen=='0' %}selected{% endif %}>No</option>
+            <option value="1" {% if form_data and form_data.SeniorCitizen=='1' %}selected{% endif %}>Yes</option>
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Partner</label>
+          <select name="Partner" class="form-select" required>
+            <option value="">Select</option>
+            <option value="Yes" {% if form_data and form_data.Partner=='Yes' %}selected{% endif %}>Yes</option>
+            <option value="No"  {% if form_data and form_data.Partner=='No'  %}selected{% endif %}>No</option>
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Dependents</label>
+          <select name="Dependents" class="form-select" required>
+            <option value="">Select</option>
+            <option value="Yes" {% if form_data and form_data.Dependents=='Yes' %}selected{% endif %}>Yes</option>
+            <option value="No"  {% if form_data and form_data.Dependents=='No'  %}selected{% endif %}>No</option>
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Tenure (months)</label>
+          <input type="number" name="tenure" class="form-control"
+                 placeholder="e.g. 24" min="0" max="72"
+                 value="{{ form_data.tenure if form_data else '' }}" required>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Section 2 : Services ───────────────────────────────────────── -->
+    <div class="form-card">
+      <div class="form-card-header">
+        <span class="section-icon">📶</span>
+        <div>
+          <h2 class="section-title">Services Subscribed</h2>
+          <p class="section-sub">Active service plan details</p>
+        </div>
+      </div>
+
+      <div class="row g-4">
+
+        {% set services = [
+          ('PhoneService',    'Phone Service'),
+          ('MultipleLines',   'Multiple Lines'),
+          ('OnlineSecurity',  'Online Security'),
+          ('OnlineBackup',    'Online Backup'),
+          ('DeviceProtection','Device Protection'),
+          ('TechSupport',     'Tech Support'),
+          ('StreamingTV',     'Streaming TV'),
+          ('StreamingMovies', 'Streaming Movies'),
+          ('PaperlessBilling','Paperless Billing'),
+        ] %}
+
+        {% for field, label in services %}
+        <div class="col-md-4">
+          <label class="form-label">{{ label }}</label>
+          <select name="{{ field }}" class="form-select" required>
+            <option value="">Select</option>
+            <option value="Yes" {% if form_data and form_data.get(field)=='Yes' %}selected{% endif %}>Yes</option>
+            <option value="No"  {% if form_data and form_data.get(field)=='No'  %}selected{% endif %}>No</option>
+          </select>
+        </div>
+        {% endfor %}
+
+        <div class="col-md-4">
+          <label class="form-label">Internet Service</label>
+          <select name="InternetService" class="form-select" required>
+            <option value="">Select</option>
+            <option value="DSL"         {% if form_data and form_data.get('InternetService')=='DSL'         %}selected{% endif %}>DSL</option>
+            <option value="Fiber optic" {% if form_data and form_data.get('InternetService')=='Fiber optic' %}selected{% endif %}>Fiber Optic</option>
+            <option value="No"          {% if form_data and form_data.get('InternetService')=='No'          %}selected{% endif %}>No Internet</option>
+          </select>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Section 3 : Billing & Contract ────────────────────────────── -->
+    <div class="form-card">
+      <div class="form-card-header">
+        <span class="section-icon">💳</span>
+        <div>
+          <h2 class="section-title">Billing & Contract</h2>
+          <p class="section-sub">Payment and contract information</p>
+        </div>
+      </div>
+
+      <div class="row g-4">
+
+        <div class="col-md-6">
+          <label class="form-label">Contract Type</label>
+          <select name="Contract" class="form-select" required>
+            <option value="">Select contract</option>
+            <option value="Month-to-month" {% if form_data and form_data.get('Contract')=='Month-to-month' %}selected{% endif %}>Month-to-month</option>
+            <option value="One year"       {% if form_data and form_data.get('Contract')=='One year'       %}selected{% endif %}>One Year</option>
+            <option value="Two year"       {% if form_data and form_data.get('Contract')=='Two year'       %}selected{% endif %}>Two Year</option>
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Payment Method</label>
+          <select name="PaymentMethod" class="form-select" required>
+            <option value="">Select method</option>
+            <option value="Electronic check"        {% if form_data and form_data.get('PaymentMethod')=='Electronic check'        %}selected{% endif %}>Electronic Check</option>
+            <option value="Mailed check"             {% if form_data and form_data.get('PaymentMethod')=='Mailed check'             %}selected{% endif %}>Mailed Check</option>
+            <option value="Bank transfer (automatic)"{% if form_data and form_data.get('PaymentMethod')=='Bank transfer (automatic)'%}selected{% endif %}>Bank Transfer (Auto)</option>
+            <option value="Credit card (automatic)"  {% if form_data and form_data.get('PaymentMethod')=='Credit card (automatic)'  %}selected{% endif %}>Credit Card (Auto)</option>
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Monthly Charges ($)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" name="MonthlyCharges" class="form-control"
+                   placeholder="e.g. 79.85" step="0.01" min="0"
+                   value="{{ form_data.MonthlyCharges if form_data else '' }}" required>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Total Charges ($)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" name="TotalCharges" class="form-control"
+                   placeholder="e.g. 1916.40" step="0.01" min="0"
+                   value="{{ form_data.TotalCharges if form_data else '' }}" required>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Submit ─────────────────────────────────────────────────────── -->
+    <div class="text-center mb-5">
+      <button type="submit" class="btn-predict" id="submitBtn">
+        <span class="btn-text">
+          <i class="bi bi-lightning-charge-fill me-2"></i>
+          Predict Churn Risk
+        </span>
+        <span class="btn-loading d-none">
+          <span class="spinner-border spinner-border-sm me-2"></span>
+          Analysing…
+        </span>
+      </button>
+      <p class="submit-hint">Results appear above the form after submission</p>
+    </div>
+
+  </form>
+
+  <!-- ═══════════════ API DOCS CARD ════════════════════════════════════ -->
+  <div class="api-docs-card">
+    <h3 class="api-title"><i class="bi bi-braces-asterisk me-2"></i>REST API Reference</h3>
+
+    <div class="row g-4">
+
+      <div class="col-md-6">
+        <div class="api-block">
+          <div class="api-block-header">
+            <span class="method-badge post">POST</span>
+            <code>/predict</code>
+          </div>
+          <p class="api-desc">Send customer data as JSON to get a churn prediction.</p>
+          <pre class="code-block">{
+  "gender"          : "Male",
+  "SeniorCitizen"   : 0,
+  "Partner"         : "No",
+  "Dependents"      : "No",
+  "tenure"          : 2,
+  "PhoneService"    : "Yes",
+  "MultipleLines"   : "No",
+  "InternetService" : "Fiber optic",
+  "OnlineSecurity"  : "No",
+  "OnlineBackup"    : "No",
+  "DeviceProtection": "No",
+  "TechSupport"     : "No",
+  "StreamingTV"     : "No",
+  "StreamingMovies" : "No",
+  "Contract"        : "Month-to-month",
+  "PaperlessBilling": "Yes",
+  "PaymentMethod"   : "Electronic check",
+  "MonthlyCharges"  : 79.85,
+  "TotalCharges"    : 159.70
+}</pre>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="api-block">
+          <div class="api-block-header">
+            <span class="method-badge response">200</span>
+            <code>Sample Response</code>
+          </div>
+          <p class="api-desc">JSON response returned by the prediction endpoint.</p>
+          <pre class="code-block">{
+  "status": "success",
+  "result": {
+    "prediction"        : "Churn",
+    "churn_probability" : 78.34,
+    "stay_probability"  : 21.66,
+    "risk_level"        : "High",
+    "risk_color"        : "danger",
+    "will_churn"        : true,
+    "message"           : "⚠️ Immediate retention action recommended."
+  }
+}</pre>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="api-block">
+          <div class="api-block-header">
+            <span class="method-badge get">GET</span>
+            <code>/health &nbsp;|&nbsp; /api/sample</code>
+          </div>
+          <p class="api-desc mb-0">
+            <code>/health</code> — returns server + model status. &nbsp;|&nbsp;
+            <code>/api/sample</code> — returns a ready-to-use sample JSON payload.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /main-container -->
+
+<!-- ═══════════════════════════ FOOTER ════════════════════════════════════ -->
+<footer class="site-footer">
+  <div class="container text-center">
+    <p>ChurnSight · Telco Customer Churn Prediction · Built with Flask + XGBoost</p>
+    <p class="footer-sub">Model trained on IBM Telco Churn Dataset · 7,043 records</p>
+  </div>
+</footer>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* ── Loading state on submit ─────────────────────────────────────────────── */
+document.getElementById('churnForm').addEventListener('submit', function(e) {
+  const btn     = document.getElementById('submitBtn');
+  const textEl  = btn.querySelector('.btn-text');
+  const loadEl  = btn.querySelector('.btn-loading');
+
+  // Basic HTML5 validation
+  if (!this.checkValidity()) {
+    e.preventDefault();
+    this.classList.add('was-validated');
+    return;
+  }
+
+  textEl.classList.add('d-none');
+  loadEl.classList.remove('d-none');
+  btn.disabled = true;
+});
+
+/* ── Auto-scroll to result ───────────────────────────────────────────────── */
+{% if result %}
+window.addEventListener('load', function() {
+  const resultCard = document.querySelector('.result-card');
+  if (resultCard) {
+    resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
+{% endif %}
+
+/* ── Total charges auto-calculator hint ─────────────────────────────────── */
+const tenureInput  = document.querySelector('[name=tenure]');
+const monthlyInput = document.querySelector('[name=MonthlyCharges]');
+const totalInput   = document.querySelector('[name=TotalCharges]');
+
+function autoCalcTotal() {
+  const t = parseFloat(tenureInput.value)  || 0;
+  const m = parseFloat(monthlyInput.value) || 0;
+  if (t > 0 && m > 0 && !totalInput.value) {
+    totalInput.placeholder = `≈ $${(t * m).toFixed(2)}  (auto-estimate)`;
+  }
+}
+
+tenureInput.addEventListener('input',  autoCalcTotal);
+monthlyInput.addEventListener('input', autoCalcTotal);
+</script>
+</body>
+</html>

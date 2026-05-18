@@ -1,0 +1,6 @@
+Place your trained model files here:
+
+  churn_model.pkl  ← from notebook: joblib.dump(tuned_model, 'churn_model.pkl')
+  scaler.pkl       ← from notebook: joblib.dump(scaler, 'scaler.pkl')
+
+Both files are generated in Step 10 of the Telco_Customer_Churn_Prediction.ipynb notebook.
